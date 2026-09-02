@@ -104,6 +104,30 @@ class ChecklistRemoteViewsFactory(
             return views
         }
 
+        if (item.isTable) {
+            val views = RemoteViews(context.packageName, R.layout.widget_table_row_item)
+            val cellIds = listOf(R.id.table_cell_0, R.id.table_cell_1, R.id.table_cell_2, R.id.table_cell_3, R.id.table_cell_4)
+            for ((idx, cellId) in cellIds.withIndex()) {
+                if (idx < item.cells.size) {
+                    views.setViewVisibility(cellId, android.view.View.VISIBLE)
+                    val raw = item.cells[idx]
+                    val text = if (item.isTableHeader) markdownToHtml("**$raw**") else markdownToHtml(raw)
+                    views.setTextViewText(cellId, text)
+                    views.setTextColor(cellId, if (item.isTableHeader) themeColors.accent else themeColors.text)
+                    val gravity = when (item.alignments.getOrElse(idx) { 0 }) {
+                        1 -> android.view.Gravity.CENTER
+                        2 -> android.view.Gravity.END
+                        else -> android.view.Gravity.START
+                    }
+                    views.setInt(cellId, "setGravity", gravity)
+                } else {
+                    views.setViewVisibility(cellId, android.view.View.GONE)
+                }
+            }
+            views.setOnClickFillInIntent(R.id.table_row_root, Intent())
+            return views
+        }
+
         if (item.isPlainText) {
             val views = RemoteViews(context.packageName, R.layout.widget_text_item)
             val displayText = if (item.isBullet) "•  ${item.text}" else item.text
@@ -175,7 +199,7 @@ class ChecklistRemoteViewsFactory(
     }
 
     override fun getLoadingView(): RemoteViews? = null
-    override fun getViewTypeCount(): Int = 3
+    override fun getViewTypeCount(): Int = 4
     override fun getItemId(position: Int): Long = items[position].lineIndex.toLong()
     override fun hasStableIds(): Boolean = true
 }

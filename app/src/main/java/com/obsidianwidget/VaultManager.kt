@@ -24,7 +24,11 @@ class VaultManager(private val context: Context, private val widgetId: Int = -1)
         val isPlainText: Boolean = false,
         val isHeading: Boolean = false,
         val isBullet: Boolean = false,
-        val indentLevel: Int = 0
+        val indentLevel: Int = 0,
+        val isTable: Boolean = false,
+        val isTableHeader: Boolean = false,
+        val cells: List<String> = emptyList(),
+        val alignments: List<Int> = emptyList() // 0=left, 1=center, 2=right
     )
 
     companion object {
@@ -55,6 +59,18 @@ class VaultManager(private val context: Context, private val widgetId: Int = -1)
         private val CHECKLIST_REGEX = Regex("""^(\s*)-\s*\[([ xX])\]\s*(.*)$""")
         private val HEADING_REGEX = Regex("""^(#{1,6})\s+(.+)$""")
         private val BULLET_REGEX = Regex("""^(\s*)[*+-]\s+(.+)$""")
+        private val TABLE_ROW_REGEX = Regex("""^\s*\|(.+)\|\s*$""")
+        private val TABLE_SEP_REGEX = Regex("""^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$""")
+
+        private fun parseTableRow(line: String): List<String> =
+            line.trim().removePrefix("|").removeSuffix("|").split("|").map { it.trim() }
+
+        private fun parseAlignments(sepLine: String): List<Int> =
+            parseTableRow(sepLine).map {
+                val l = it.trim().startsWith(":")
+                val r = it.trim().endsWith(":")
+                if (l && r) 1 else if (r) 2 else 0
+            }
 
         fun deleteWidgetPrefs(context: Context, widgetId: Int) {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -438,8 +454,29 @@ class VaultManager(private val context: Context, private val widgetId: Int = -1)
      */
     fun parseChecklist(): List<ChecklistItem> {
         val content = readWidgetNote() ?: return emptyList()
+        val lines = content.lines()
         val items = mutableListOf<ChecklistItem>()
-        content.lines().forEachIndexed { index, line ->
+        var i = 0
+        while (i < lines.size) {
+            val line = lines[i]
+
+            // Table detection: header row + separator row
+            if (TABLE_ROW_REGEX.matches(line) && i + 1 < lines.size && TABLE_SEP_REGEX.matches(lines[i + 1])) {
+                val aligns = parseAlignments(lines[i + 1])
+                val headerCells = parseTableRow(line)
+                items.add(ChecklistItem(lineIndex = i, text = line, isChecked = false, isPlainText = true,
+                    isTable = true, isTableHeader = true, cells = headerCells, alignments = aligns))
+                var j = i + 2
+                while (j < lines.size && TABLE_ROW_REGEX.matches(lines[j])) {
+                    val cells = parseTableRow(lines[j])
+                    items.add(ChecklistItem(lineIndex = j, text = lines[j], isChecked = false, isPlainText = true,
+                        isTable = true, isTableHeader = false, cells = cells, alignments = aligns))
+                    j++
+                }
+                i = j
+                continue
+            }
+
             val match = CHECKLIST_REGEX.matchEntire(line)
             val headingMatch = HEADING_REGEX.matchEntire(line)
             if (match != null) {
@@ -447,21 +484,22 @@ class VaultManager(private val context: Context, private val widgetId: Int = -1)
                 val indentLevel = indent.count { it == ' ' } / 2 + indent.count { it == '\t' }
                 val checked = match.groupValues[2].lowercase() == "x"
                 val text = match.groupValues[3].trim()
-                items.add(ChecklistItem(lineIndex = index, text = text, isChecked = checked, indentLevel = indentLevel))
+                items.add(ChecklistItem(lineIndex = i, text = text, isChecked = checked, indentLevel = indentLevel))
             } else if (headingMatch != null) {
                 val text = headingMatch.groupValues[2].trim()
-                items.add(ChecklistItem(lineIndex = index, text = text, isChecked = false, isPlainText = true, isHeading = true))
+                items.add(ChecklistItem(lineIndex = i, text = text, isChecked = false, isPlainText = true, isHeading = true))
             } else {
                 val bulletMatch = BULLET_REGEX.matchEntire(line)
                 if (bulletMatch != null) {
                     val indent = bulletMatch.groupValues[1]
                     val indentLevel = indent.count { it == ' ' } / 2 + indent.count { it == '\t' }
                     val text = bulletMatch.groupValues[2].trim()
-                    items.add(ChecklistItem(lineIndex = index, text = text, isChecked = false, isPlainText = true, isBullet = true, indentLevel = indentLevel))
+                    items.add(ChecklistItem(lineIndex = i, text = text, isChecked = false, isPlainText = true, isBullet = true, indentLevel = indentLevel))
                 } else if (line.isNotBlank()) {
-                    items.add(ChecklistItem(lineIndex = index, text = line.trim(), isChecked = false, isPlainText = true))
+                    items.add(ChecklistItem(lineIndex = i, text = line.trim(), isChecked = false, isPlainText = true))
                 }
             }
+            i++
         }
         if (sortUnchecked) {
             val nonChecklist = items.filter { it.isPlainText }
