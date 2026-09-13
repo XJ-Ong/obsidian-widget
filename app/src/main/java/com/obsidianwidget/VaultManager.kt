@@ -60,7 +60,7 @@ class VaultManager(private val context: Context, private val widgetId: Int = -1)
         private val HEADING_REGEX = Regex("""^(#{1,6})\s+(.+)$""")
         private val BULLET_REGEX = Regex("""^(\s*)[*+-]\s+(.+)$""")
         private val TABLE_ROW_REGEX = Regex("""^\s*\|(.+)\|\s*$""")
-        private val TABLE_SEP_REGEX = Regex("""^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$""")
+        private val TABLE_SEP_REGEX = Regex("""^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$""")
 
         private fun parseTableRow(line: String): List<String> =
             line.trim().removePrefix("|").removeSuffix("|").split("|").map { it.trim() }
